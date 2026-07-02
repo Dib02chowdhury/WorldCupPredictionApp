@@ -762,7 +762,9 @@ window.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => document.getElementById('splashScreen').classList.add('hidden'), 700);
   if (window.location.protocol === 'https:' || window.location.protocol === 'http:') {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(console.warn);
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        return Promise.all(registrations.map((registration) => registration.unregister()));
+      }).then(() => navigator.serviceWorker.register('./sw.js')).catch(console.warn);
     }
   }
   loadRemoteState(true);
