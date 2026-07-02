@@ -55,19 +55,52 @@ function mergeRemoteState(payload) {
   renderAll();
 }
 
+function buildQueryString(params) {
+  return Object.keys(params)
+    .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+    .join('&');
+}
+
+function jsonpRequest(url, params) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `jsonpCallback_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+    params.callback = callbackName;
+    const script = document.createElement('script');
+    script.src = `${url}?${buildQueryString(params)}`;
+    script.async = true;
+    let timeoutId = null;
+
+    window[callbackName] = (data) => {
+      clearTimeout(timeoutId);
+      delete window[callbackName];
+      document.body.removeChild(script);
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      clearTimeout(timeoutId);
+      delete window[callbackName];
+      if (script.parentNode) document.body.removeChild(script);
+      reject(new Error('JSONP request failed'));
+    };
+
+    timeoutId = setTimeout(() => {
+      delete window[callbackName];
+      if (script.parentNode) document.body.removeChild(script);
+      reject(new Error('JSONP request timed out'));
+    }, 15000);
+
+    document.body.appendChild(script);
+  });
+}
+
 async function loadRemoteState(showNotice = false) {
   if (!API_URL) {
     showToast('Apps Script URL is not configured yet.');
     return false;
   }
   try {
-    const response = await fetch(`${API_URL}?action=getData`, {
-      method: 'GET',
-      mode: 'cors',
-      credentials: 'omit'
-    });
-    if (!response.ok) return false;
-    const payload = await response.json();
+    const payload = await jsonpRequest(API_URL, { action: 'getData' });
     if (payload && typeof payload === 'object' && Array.isArray(payload.matches)) {
       mergeRemoteState(payload);
       if (showNotice) {
@@ -84,16 +117,7 @@ async function loadRemoteState(showNotice = false) {
 async function syncToBackend(action, payload) {
   if (!API_URL) return;
   try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      mode: 'cors',
-      credentials: 'omit',
-      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: JSON.stringify({ action, payload })
-    });
-    if (!response.ok) {
-      throw new Error('Backend request failed');
-    }
+    await jsonpRequest(API_URL, { action, payload: JSON.stringify(payload) });
   } catch (error) {
     console.warn('Backend sync failed', error);
   }

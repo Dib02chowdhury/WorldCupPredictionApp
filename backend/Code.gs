@@ -98,15 +98,25 @@ function sheetToObjects(sheet, headers) {
     });
 }
 
-function jsonResponse(data) {
-  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+function respond(data, callback) {
+  const output = ContentService.createTextOutput();
+  if (callback) {
+    output.setMimeType(ContentService.MimeType.JAVASCRIPT);
+    output.setContent(`${callback}(${JSON.stringify(data)});`);
+  } else {
+    output.setMimeType(ContentService.MimeType.JSON);
+    output.setContent(JSON.stringify(data));
+  }
+  return output;
 }
 
 function doOptions(e) {
-  return jsonResponse({ status: 'ok' });
+  const params = e && e.parameter ? e.parameter : {};
+  return respond({ status: 'ok' }, params.callback);
 }
 
 function doGet(e) {
+  const params = e && e.parameter ? e.parameter : {};
   try {
     const spreadsheet = getSpreadsheet();
     ensureDefaultAdmin(spreadsheet);
@@ -122,25 +132,20 @@ function doGet(e) {
     ensureHeaders(questionsSheet, ['id', 'question', 'correctAnswer', 'deadline', 'status', 'points']);
     ensureHeaders(responsesSheet, ['username', 'questionID', 'userAnswer', 'awardedPoints', 'timestamp']);
 
-    return jsonResponse({
-      status: 'ok',
-      users: sheetToObjects(usersSheet, ['username', 'password', 'role']),
-      matches: sheetToObjects(matchesSheet, ['id', 'matchNumber', 'tournament', 'teamA', 'teamB', 'kickoffDateTime', 'finalScoreA', 'finalScoreB', 'status']),
-      predictions: sheetToObjects(predictionsSheet, ['username', 'matchNumber', 'predictionA', 'predictionB', 'timestamp', 'participationPoints', 'correctResultPoints', 'exactScorePoints', 'totalPoints']),
-      specialQuestions: sheetToObjects(questionsSheet, ['id', 'question', 'correctAnswer', 'deadline', 'status', 'points']),
-      specialQuestionResponses: sheetToObjects(responsesSheet, ['username', 'questionID', 'userAnswer', 'awardedPoints', 'timestamp'])
-    });
-  } catch (error) {
-    return jsonResponse({ status: 'error', message: error.message });
-  }
-}
+    const action = params.action;
+    const callback = params.callback;
+    const payload = params.payload ? JSON.parse(params.payload) : {};
 
-function doPost(e) {
-  try {
-    const postData = JSON.parse(e.postData.contents || '{}');
-    const action = postData.action;
-    const payload = postData.payload || {};
-    const spreadsheet = getSpreadsheet();
+    if (action === 'getData') {
+      return respond({
+        status: 'ok',
+        users: sheetToObjects(usersSheet, ['username', 'password', 'role']),
+        matches: sheetToObjects(matchesSheet, ['id', 'matchNumber', 'tournament', 'teamA', 'teamB', 'kickoffDateTime', 'finalScoreA', 'finalScoreB', 'status']),
+        predictions: sheetToObjects(predictionsSheet, ['username', 'matchNumber', 'predictionA', 'predictionB', 'timestamp', 'participationPoints', 'correctResultPoints', 'exactScorePoints', 'totalPoints']),
+        specialQuestions: sheetToObjects(questionsSheet, ['id', 'question', 'correctAnswer', 'deadline', 'status', 'points']),
+        specialQuestionResponses: sheetToObjects(responsesSheet, ['username', 'questionID', 'userAnswer', 'awardedPoints', 'timestamp'])
+      }, callback);
+    }
 
     if (action === 'saveUser') {
       const sheet = getOrCreateSheet(spreadsheet, SHEET_NAMES.users);
@@ -153,7 +158,7 @@ function doPost(e) {
       } else {
         sheet.appendRow(row);
       }
-      return jsonResponse({ status: 'ok', action: 'saveUser' });
+      return respond({ status: 'ok', action: 'saveUser' }, callback);
     }
 
     if (action === 'saveSpecialResponse') {
@@ -167,7 +172,7 @@ function doPost(e) {
       } else {
         sheet.appendRow(row);
       }
-      return jsonResponse({ status: 'ok', action: 'saveSpecialResponse' });
+      return respond({ status: 'ok', action: 'saveSpecialResponse' }, callback);
     }
 
     if (action === 'savePrediction') {
@@ -191,7 +196,7 @@ function doPost(e) {
       } else {
         sheet.appendRow(row);
       }
-      return jsonResponse({ status: 'ok', action: 'savePrediction' });
+      return respond({ status: 'ok', action: 'savePrediction' }, callback);
     }
 
     if (action === 'saveMatch') {
@@ -215,7 +220,7 @@ function doPost(e) {
       } else {
         sheet.appendRow(row);
       }
-      return jsonResponse({ status: 'ok', action: 'saveMatch' });
+      return respond({ status: 'ok', action: 'saveMatch' }, callback);
     }
 
     if (action === 'deleteMatch') {
@@ -226,7 +231,7 @@ function doPost(e) {
       if (rowIndex > 0) {
         sheet.deleteRow(rowIndex);
       }
-      return jsonResponse({ status: 'ok', action: 'deleteMatch' });
+      return respond({ status: 'ok', action: 'deleteMatch' }, callback);
     }
 
     if (action === 'saveQuestion') {
@@ -240,11 +245,126 @@ function doPost(e) {
       } else {
         sheet.appendRow(row);
       }
-      return jsonResponse({ status: 'ok', action: 'saveQuestion' });
+      return respond({ status: 'ok', action: 'saveQuestion' }, callback);
     }
 
-    return jsonResponse({ status: 'ok', received: postData });
+    return respond({ status: 'error', message: 'Unknown action' }, callback);
   } catch (error) {
-    return jsonResponse({ status: 'error', message: error.message });
+    const params = e && e.parameter ? e.parameter : {};
+    return respond({ status: 'error', message: error.message }, params.callback);
+  }
+}
+
+function doPost(e) {
+  try {
+    const postData = JSON.parse(e.postData.contents || '{}');
+    const action = postData.action;
+    const payload = postData.payload || {};
+    const spreadsheet = getSpreadsheet();
+
+    if (action === 'saveUser') {
+      const sheet = getOrCreateSheet(spreadsheet, SHEET_NAMES.users);
+      const headers = ['username', 'password', 'role'];
+      ensureHeaders(sheet, headers);
+      const rowIndex = findRowIndex(sheet, 'username', payload.username, headers);
+      const row = [payload.username, payload.password, payload.role || 'user'];
+      if (rowIndex > 0) {
+        sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
+      } else {
+        sheet.appendRow(row);
+      }
+      return respond({ status: 'ok', action: 'saveUser' });
+    }
+
+    if (action === 'saveSpecialResponse') {
+      const sheet = getOrCreateSheet(spreadsheet, SHEET_NAMES.specialQuestionResponses);
+      const headers = ['username', 'questionID', 'userAnswer', 'awardedPoints', 'timestamp'];
+      ensureHeaders(sheet, headers);
+      const rowIndex = findResponseRow(sheet, payload.username, payload.questionID, headers);
+      const row = [payload.username, payload.questionID, payload.userAnswer, payload.awardedPoints, payload.timestamp];
+      if (rowIndex > 0) {
+        sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
+      } else {
+        sheet.appendRow(row);
+      }
+      return respond({ status: 'ok', action: 'saveSpecialResponse' });
+    }
+
+    if (action === 'savePrediction') {
+      const sheet = getOrCreateSheet(spreadsheet, SHEET_NAMES.predictions);
+      const headers = ['username', 'matchNumber', 'predictionA', 'predictionB', 'timestamp', 'participationPoints', 'correctResultPoints', 'exactScorePoints', 'totalPoints'];
+      ensureHeaders(sheet, headers);
+      const rowIndex = findPredictionRow(sheet, payload.username, payload.matchNumber, headers);
+      const row = [
+        payload.username,
+        payload.matchNumber,
+        payload.predictionA,
+        payload.predictionB,
+        payload.timestamp,
+        payload.participationPoints,
+        payload.correctResultPoints,
+        payload.exactScorePoints,
+        payload.totalPoints
+      ];
+      if (rowIndex > 0) {
+        sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
+      } else {
+        sheet.appendRow(row);
+      }
+      return respond({ status: 'ok', action: 'savePrediction' });
+    }
+
+    if (action === 'saveMatch') {
+      const sheet = getOrCreateSheet(spreadsheet, SHEET_NAMES.matches);
+      const headers = ['id', 'matchNumber', 'tournament', 'teamA', 'teamB', 'kickoffDateTime', 'finalScoreA', 'finalScoreB', 'status'];
+      ensureHeaders(sheet, headers);
+      const rowIndex = findRowIndex(sheet, 'id', payload.id, headers);
+      const row = [
+        payload.id,
+        payload.matchNumber,
+        payload.tournament,
+        payload.teamA,
+        payload.teamB,
+        payload.kickoffDateTime,
+        payload.finalScoreA,
+        payload.finalScoreB,
+        payload.status
+      ];
+      if (rowIndex > 0) {
+        sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
+      } else {
+        sheet.appendRow(row);
+      }
+      return respond({ status: 'ok', action: 'saveMatch' });
+    }
+
+    if (action === 'deleteMatch') {
+      const sheet = getOrCreateSheet(spreadsheet, SHEET_NAMES.matches);
+      const headers = ['id', 'matchNumber', 'tournament', 'teamA', 'teamB', 'kickoffDateTime', 'finalScoreA', 'finalScoreB', 'status'];
+      ensureHeaders(sheet, headers);
+      const rowIndex = findRowIndex(sheet, 'id', payload.id, headers);
+      if (rowIndex > 0) {
+        sheet.deleteRow(rowIndex);
+      }
+      return respond({ status: 'ok', action: 'deleteMatch' });
+    }
+
+    if (action === 'saveQuestion') {
+      const sheet = getOrCreateSheet(spreadsheet, SHEET_NAMES.specialQuestions);
+      const headers = ['id', 'question', 'correctAnswer', 'deadline', 'status', 'points'];
+      ensureHeaders(sheet, headers);
+      const rowIndex = findRowIndex(sheet, 'id', payload.id, headers);
+      const row = [payload.id, payload.question, payload.correctAnswer, payload.deadline, payload.status, payload.points];
+      if (rowIndex > 0) {
+        sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
+      } else {
+        sheet.appendRow(row);
+      }
+      return respond({ status: 'ok', action: 'saveQuestion' });
+    }
+
+    return respond({ status: 'ok', received: postData });
+  } catch (error) {
+    return respond({ status: 'error', message: error.message });
   }
 }
