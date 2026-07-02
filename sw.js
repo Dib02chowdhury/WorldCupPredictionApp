@@ -1,4 +1,4 @@
-const CACHE_NAME = 'worldcup-pulse-v1';
+const CACHE_NAME = 'worldcup-pulse-v2';
 const CORE_ASSETS = ['./', './index.html', './manifest.json', './css/styles.css', './js/app.js', './assets/icons/favicon.svg', './assets/icons/icon-192.svg', './assets/icons/icon-512.svg'];
 
 self.addEventListener('install', (event) => {
@@ -15,6 +15,9 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const requestUrl = new URL(event.request.url);
+  if (requestUrl.origin !== self.location.origin) return;
+
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
       const copy = response.clone();
