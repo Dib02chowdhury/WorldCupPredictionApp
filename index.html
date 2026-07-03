@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#07131f" />
+    <meta name="description" content="Mobile-first World Cup prediction league with live countdowns, leaderboard, and admin tools." />
+    <title>World Cup Prediction League</title>
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <div class="splash-screen" id="splashScreen">
+      <div class="splash-card">
+        <div class="ball-icon"><i class="fa-solid fa-futbol"></i></div>
+        <h1>World Cup Prediction League</h1>
+        <p>Loading your premium matchday experience…</p>
+      </div>
+    </div>
+
+    <div class="app-shell">
+      <header class="top-bar">
+        <div class="brand-block">
+          <div class="brand-badge"><i class="fa-solid fa-trophy"></i></div>
+          <div>
+            <p class="eyebrow">FIFA Prediction League</p>
+            <h2>WorldCup Pulse</h2>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="ghost-btn" id="themeToggle"><i class="fa-solid fa-moon"></i></button>
+          <button class="ghost-btn" id="adminButton" hidden>Admin</button>
+          <button class="primary-btn" id="authButton">Login</button>
+        </div>
+      </header>
+
+      <main class="content-area">
+        <section class="page-section active" id="view-home">
+          <div class="hero-card">
+            <div class="hero-copy">
+              <p class="eyebrow">Tournament Pulse</p>
+              <h1>Predict every big moment.</h1>
+              <p>Follow the action, lock your picks, and climb the leaderboard with a premium matchday experience.</p>
+              <div class="hero-actions">
+                <button class="primary-btn" data-view="upcoming">Predict Now</button>
+                <button class="ghost-btn" data-view="leaderboard">View Rankings</button>
+              </div>
+            </div>
+            <div class="hero-stats">
+              <div class="stat-pill"><strong id="homePlayers">0</strong><span>Players</span></div>
+              <div class="stat-pill"><strong id="homeMatches">0</strong><span>Matches</span></div>
+              <div class="stat-pill"><strong id="homePredictions">0</strong><span>Predictions</span></div>
+            </div>
+          </div>
+
+          <article class="info-card highlight-card combined-home-card">
+            <div class="card-header">
+              <p class="eyebrow">Matchday Snapshot</p>
+              <span class="status-chip live">Live Countdown</span>
+            </div>
+            <div class="combined-home-content">
+              <div class="combined-home-section">
+                <p class="eyebrow">Next Match</p>
+                <h3 id="nextMatchTitle">Loading…</h3>
+                <p id="nextMatchMeta">Loading…</p>
+                <div class="countdown" id="heroCountdown">--:--:--</div>
+                <button class="primary-btn full-width" data-view="upcoming">Open Match Card</button>
+              </div>
+              <div class="combined-home-section">
+                <p class="eyebrow">Your Next Pick</p>
+                <h3>Predict the winner and scoreline.</h3>
+                <p id="questionMeta">Choose your match and submit your prediction before kickoff.</p>
+                <button class="primary-btn full-width" data-view="upcoming">Browse Matches</button>
+              </div>
+            </div>
+          </article>
+
+          <div class="section-header">
+            <h3>Top 10 Leaderboard</h3>
+            <button class="text-link" data-view="leaderboard">See full board</button>
+          </div>
+          <div class="leaderboard-preview" id="leaderboardPreview"></div>
+
+          <div class="section-header">
+            <h3>Latest Results</h3>
+          </div>
+          <div class="results-stack" id="latestResults"></div>
+        </section>
+
+        <section class="page-section" id="view-upcoming">
+          <div class="section-header">
+            <h3>Upcoming Matches</h3>
+            <p>Predict before kickoff and lock in your strategy.</p>
+          </div>
+          <div id="matchesList"></div>
+        </section>
+
+        <section class="page-section" id="view-predictions">
+          <div class="section-header">
+            <h3>My Predictions</h3>
+            <p>Track your submissions, status, and points.</p>
+          </div>
+          <div id="myPredictionsList"></div>
+        </section>
+
+        <section class="page-section" id="view-leaderboard">
+          <div class="section-header">
+            <h3>Leaderboard</h3>
+            <p>Fresh points update after every result.</p>
+          </div>
+          <div id="leaderboardList"></div>
+        </section>
+
+        <section class="page-section" id="view-admin">
+          <div class="section-header">
+            <h3>Admin Dashboard</h3>
+            <p>Manage matches, publish results, and control questions.</p>
+          </div>
+          <div class="admin-grid" id="adminDashboard"></div>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Mobile navigation">
+        <button class="nav-item active" data-view="home"><i class="fa-solid fa-house"></i><span>Home</span></button>
+        <button class="nav-item" data-view="upcoming"><i class="fa-solid fa-calendar-days"></i><span>Upcoming</span></button>
+        <button class="nav-item" data-view="predictions"><i class="fa-solid fa-futbol"></i><span>My Picks</span></button>
+        <button class="nav-item" data-view="leaderboard"><i class="fa-solid fa-ranking-star"></i><span>Leaderboard</span></button>
+      </nav>
+    </div>
+
+    <div class="modal-backdrop" id="authModalBackdrop"></div>
+    <div class="auth-modal" id="authModal" aria-hidden="true">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="modalTitle">Welcome back</h3>
+          <button class="icon-btn" id="closeModalBtn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <form id="authForm" class="auth-form">
+          <input type="text" id="authUsername" placeholder="Username" required />
+          <input type="password" id="authPassword" placeholder="Password" required />
+          <button class="primary-btn full-width" type="submit">Continue</button>
+        </form>
+        <p class="switch-copy" id="modalSwitchCopy">New here? <a href="#" id="toggleAuthMode">Create account</a></p>
+        <p class="hint-text">Use your username and password to continue.</p>
+      </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="config.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>
