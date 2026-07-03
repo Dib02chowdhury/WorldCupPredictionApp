@@ -27,10 +27,16 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      - name: Build static site artifact
+        run: |
+          rm -rf public
+          mkdir -p public
+          cp -R index.html css js assets config.js manifest.json sw.js .nojekyll public/
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./
+          path: public
 
       - name: Deploy to GitHub Pages
         id: deployment
