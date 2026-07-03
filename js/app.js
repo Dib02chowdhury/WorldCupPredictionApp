@@ -115,7 +115,7 @@ async function loadRemoteState(showNotice = false) {
 }
 
 async function syncToBackend(action, payload) {
-  if (!API_URL) return;
+  if (!API_URL) return false;
   try {
     await fetch(API_URL, {
       method: 'POST',
@@ -194,14 +194,8 @@ function renderHome() {
     document.getElementById('nextMatchMeta').textContent = 'Admin can add the next fixture from the dashboard.';
   }
 
-  const question = state.specialQuestions.find((item) => item.status === 'active') || state.specialQuestions[0];
-  if (question) {
-    document.getElementById('questionTitle').textContent = question.question;
-    document.getElementById('questionMeta').textContent = `Deadline: ${formatDate(question.deadline)} • ${question.points} point`;
-  } else {
-    document.getElementById('questionTitle').textContent = 'No active special question';
-    document.getElementById('questionMeta').textContent = 'Admin can add a question for users to answer.';
-  }
+  document.getElementById('questionTitle').textContent = 'Predict every upcoming match';
+  document.getElementById('questionMeta').textContent = 'Submit your predictions early to climb the leaderboard.';
 
   renderLeaderboardPreview();
   renderResults();
@@ -323,7 +317,7 @@ function renderLeaderboard() {
           <div class="rank-badge ${rankClass}">${index + 1}</div>
           <div>
             <strong>${entry.username}</strong>
-            <div class="meta-text">Participation ${entry.participationPoints} • Result ${entry.correctResultPoints} • Exact ${entry.exactScorePoints} • Special ${entry.specialQuestionPoints}</div>
+            <div class="meta-text">Participation ${entry.participationPoints} • Result ${entry.correctResultPoints} • Exact ${entry.exactScorePoints}</div>
           </div>
         </div>
         <strong>${entry.totalPoints} pts</strong>
@@ -365,10 +359,6 @@ function renderAdmin() {
       <p class="count-display">${predictionsSubmitted}</p>
     </div>
     <div class="admin-card">
-      <h4>Special Questions</h4>
-      <p class="count-display">${questions}</p>
-    </div>
-    <div class="admin-card">
       <h4>Create Match</h4>
       <form id="createMatchForm" class="admin-form">
         <input name="matchNumber" type="number" placeholder="Match Number" required />
@@ -388,16 +378,6 @@ function renderAdmin() {
         <input name="finalScoreA" type="number" min="0" max="20" placeholder="Score A" required />
         <input name="finalScoreB" type="number" min="0" max="20" placeholder="Score B" required />
         <button class="primary-btn" type="submit">Publish Result</button>
-      </form>
-    </div>
-    <div class="admin-card">
-      <h4>Create Special Question</h4>
-      <form id="questionForm" class="admin-form">
-        <input name="question" placeholder="Question" required />
-        <input name="correctAnswer" type="number" placeholder="Correct Answer" required />
-        <input name="deadline" type="datetime-local" required />
-        <input name="points" type="number" placeholder="Points" value="1" min="1" required />
-        <button class="primary-btn" type="submit">Create Question</button>
       </form>
     </div>
     <div class="admin-card">
@@ -520,14 +500,18 @@ async function handleAuthSubmit(event) {
     }
     const newUser = { username, password, role: 'user' };
     state.users.push(newUser);
+    state.sessionUser = { username: newUser.username, role: newUser.role };
     saveState();
-    await syncToBackend('saveUser', newUser);
-    await loadRemoteState();
-    const createdUser = state.users.find((user) => user.username.toLowerCase() === username.toLowerCase());
-    if (!createdUser) {
-      showToast('Unable to sync new user to Google Sheets.');
+    updateAuthButton();
+    const saved = await syncToBackend('saveUser', newUser);
+    if (!saved) {
+      showToast('Account created locally. You can log in now, and backend sync will happen once available.');
+      closeAuthModal();
+      renderAll();
       return;
     }
+    await loadRemoteState();
+    const createdUser = state.users.find((user) => user.username.toLowerCase() === username.toLowerCase());
     state.sessionUser = { username: createdUser.username, role: createdUser.role };
     saveState();
     updateAuthButton();
@@ -558,7 +542,7 @@ async function handlePredictionSubmit(event) {
     openAuthModal();
     return;
   }
-  const form = event.currentTarget;
+  const form = event.target.closest('form') || event.currentTarget;
   const matchId = Number(form.dataset.matchId);
   const match = state.matches.find((item) => item.id === matchId);
   if (!match) return;
@@ -591,43 +575,30 @@ async function handlePredictionSubmit(event) {
   showToast('Prediction saved successfully.');
 }
 
-async function handleSpecialQuestionSubmit(event) {
-  event.preventDefault();
-  const user = getCurrentUser();
-  if (!user) {
-    showToast('Please log in to submit an answer.');
-    openAuthModal();
-    return;
-  }
-  const form = event.currentTarget;
-  const answerInput = form.querySelector('input[name="specialAnswer"]') || document.getElementById('specialAnswerInput');
-  const answer = answerInput?.value;
-  const question = state.specialQuestions.find((item) => item.status === 'active') || state.specialQuestions[0];
-  if (!question || !answer) {
-    showToast('Please enter a numeric answer.');
-    return;
-  }
-  const payload = {
-    username: user.username,
-    questionID: question.id,
-    userAnswer: answer,
-    awardedPoints: Number(answer) === question.correctAnswer ? question.points : 0,
-    timestamp: new Date().toISOString()
-  };
-  await syncAndRefresh('saveSpecialResponse', payload);
-  showToast('Special question answer saved.');
-}
 
 async function handleCreateMatch(event) {
   event.preventDefault();
-  const form = event.currentTarget;
+  const form = event.target.closest('form') || event.currentTarget;
+  if (!form) {
+    showToast('Match form not found.');
+    return;
+  }
+  const matchNumberField = form.querySelector('[name="matchNumber"]');
+  const tournamentField = form.querySelector('[name="tournament"]');
+  const teamAField = form.querySelector('[name="teamA"]');
+  const teamBField = form.querySelector('[name="teamB"]');
+  const kickoffField = form.querySelector('[name="kickoffDateTime"]');
+  if (!matchNumberField || !tournamentField || !teamAField || !teamBField || !kickoffField) {
+    showToast('Please fill out all match fields.');
+    return;
+  }
   const payload = {
     id: Date.now(),
-    matchNumber: Number(form.matchNumber.value),
-    tournament: form.tournament.value,
-    teamA: form.teamA.value,
-    teamB: form.teamB.value,
-    kickoffDateTime: new Date(form.kickoffDateTime.value).toISOString(),
+    matchNumber: Number(matchNumberField.value),
+    tournament: tournamentField.value,
+    teamA: teamAField.value,
+    teamB: teamBField.value,
+    kickoffDateTime: new Date(kickoffField.value).toISOString(),
     finalScoreA: null,
     finalScoreB: null,
     status: 'upcoming'
@@ -653,12 +624,23 @@ async function handleDeleteMatch(event) {
 
 async function handlePublishResult(event) {
   event.preventDefault();
-  const form = event.currentTarget;
-  const match = state.matches.find((item) => item.id === Number(form.matchId.value));
+  const form = event.target.closest('form') || event.currentTarget;
+  if (!form) {
+    showToast('Result form not found.');
+    return;
+  }
+  const matchIdField = form.querySelector('[name="matchId"]');
+  const finalScoreAField = form.querySelector('[name="finalScoreA"]');
+  const finalScoreBField = form.querySelector('[name="finalScoreB"]');
+  if (!matchIdField || !finalScoreAField || !finalScoreBField) {
+    showToast('Please fill out all result fields.');
+    return;
+  }
+  const match = state.matches.find((item) => item.id === Number(matchIdField.value));
   if (!match) return;
   const settings = getPointSettings();
-  match.finalScoreA = Number(form.finalScoreA.value);
-  match.finalScoreB = Number(form.finalScoreB.value);
+  match.finalScoreA = Number(finalScoreAField.value);
+  match.finalScoreB = Number(finalScoreBField.value);
   match.status = 'completed';
   state.predictions.forEach((prediction) => {
     if (prediction.matchNumber === match.matchNumber) {
@@ -734,18 +716,14 @@ function attachListeners() {
   document.getElementById('closeModalBtn').addEventListener('click', closeAuthModal);
   document.getElementById('authModalBackdrop').addEventListener('click', closeAuthModal);
   document.getElementById('authForm').addEventListener('submit', handleAuthSubmit);
-  document.getElementById('specialQuestionForm').addEventListener('submit', handleSpecialQuestionSubmit);
   document.getElementById('themeToggle').addEventListener('click', () => {
     document.body.classList.toggle('dark-theme');
     showToast('Theme toggle ready for your preference.');
   });
   document.addEventListener('submit', (event) => {
     if (event.target.classList.contains('prediction-form')) handlePredictionSubmit(event);
-    if (event.target.classList.contains('inline-question-form')) handleSpecialQuestionSubmit(event);
-    if (event.target.id === 'specialQuestionForm') handleSpecialQuestionSubmit(event);
     if (event.target.id === 'createMatchForm') handleCreateMatch(event);
     if (event.target.id === 'resultForm') handlePublishResult(event);
-    if (event.target.id === 'questionForm') handleCreateQuestion(event);
   });
   document.addEventListener('click', (event) => {
     if (event.target.id === 'toggleAuthMode') {
