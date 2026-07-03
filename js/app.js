@@ -117,9 +117,18 @@ async function loadRemoteState(showNotice = false) {
 async function syncToBackend(action, payload) {
   if (!API_URL) return;
   try {
-    await jsonpRequest(API_URL, { action, payload: JSON.stringify(payload) });
+    await fetch(API_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=UTF-8'
+      },
+      body: JSON.stringify({ action, payload })
+    });
+    return true;
   } catch (error) {
     console.warn('Backend sync failed', error);
+    return false;
   }
 }
 
@@ -764,7 +773,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then((registrations) => {
         return Promise.all(registrations.map((registration) => registration.unregister()));
-      }).then(() => navigator.serviceWorker.register('./sw.js')).catch(console.warn);
+      }).catch(console.warn);
     }
   }
   loadRemoteState(true);
